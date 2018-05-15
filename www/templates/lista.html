@@ -5,7 +5,7 @@
 
     <ion-content ng-controller="ListaCtrl">
         <ion-list>
-            <ion-item ng-repeat="t in tarefas">
+            <ion-item ng-repeat="t in tarefas" ng-click="editar($index)">
                 {{t.texto}}
                 <ion-option-button class="button-assertive icon-left ion-trash-a" ng-click="apagar($index)">Apagar</ion-option-button>
                 <ion-option-button class="button-positive icon-left ion-checkmark" ng-click="concluir($index)">Concluir</ion-option-button>            
