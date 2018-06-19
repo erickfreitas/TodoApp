@@ -4,6 +4,7 @@ var app = angular.module('todoapp', ['ionic']);
 //Criando rotas e definindo a rota primária
 app.config(function($stateProvider, $urlRouterProvider){
   $stateProvider.state('list', {
+    cache: false,
     url: '/list',
     templateUrl: 'templates/lista.html'
   });
@@ -20,7 +21,13 @@ app.config(function($stateProvider, $urlRouterProvider){
     controller: 'EditarCtrl'
   });
 
-  $urlRouterProvider.otherwise('list');
+  $stateProvider.state('login', {
+    url: '/login',
+    templateUrl: 'templates/login.html',
+    controller: 'LoginCtrl'
+  });
+
+  $urlRouterProvider.otherwise('login');
 
 });
 
@@ -37,16 +44,50 @@ app.run(function($ionicPlatform) {
   });
 });
 
-app.controller('ListaCtrl', function($scope, $state, TarefaService){
+app.controller('LoginCtrl', function($scope, $http, $state, $ionicHistory, $ionicPopup){
+  $scope.usuario = { };
 
-  $scope.tarefas = TarefaService.lista();
+  $scope.login = function(){
+    $http.post('http://localhost:3004/api/usuario', $scope.usuario).then(function(response){
+      if(response.status == 200){
+        //Salvando dados do usuario no localStorage
+        window.localStorage.setItem('usuario', JSON.stringify(response.data));
+        //Configurando a view para não mostrar o botão de voltar a página 
+        $ionicHistory.nextViewOptions({
+          disableBack: true
+        });
 
-  $scope.concluir = function(indice){
-    TarefaService.concluir(indice);
+        $state.go('list');
+      }
+    }, function(response){
+      $ionicPopup.alert({
+        title: 'Falha no acesso',
+        template: 'Usuário ou senha inválidos'
+      })
+    });
+  };
+});
+
+app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebService){
+
+  TarefaWebService.lista().then(function(response){
+    $scope.tarefas = response;
+  });
+
+  $scope.concluir = function(indice, tarefa){
+    TarefaWebService.concluir(indice, tarefa).then(function(){
+      TarefaWebService.lista().then(function(response){
+        $scope.tarefas = response;
+      });
+    });
   }
 
   $scope.apagar = function(indice){
-    TarefaService.apagar(indice);
+    TarefaWebService.apagar(indice).then(function(){
+      TarefaWebService.lista().then(function(response){
+        $scope.tarefas = response;
+      });
+    });
   }
 
   $scope.editar = function(indice){
@@ -54,7 +95,7 @@ app.controller('ListaCtrl', function($scope, $state, TarefaService){
   }
 });
 
-app.controller('NovoCtrl', function($scope, $state, TarefaService){
+app.controller('NovoCtrl', function($scope, $state, TarefaWebService){
 
   $scope.tarefa = {
     "texto" : '', // <input ng-model="texto" ..
@@ -63,18 +104,23 @@ app.controller('NovoCtrl', function($scope, $state, TarefaService){
   };
   
   $scope.salvar = function(){
-    TarefaService.inserir($scope.tarefa)
-    $state.go('list');
+    TarefaWebService.inserir($scope.tarefa).then(function(){
+      $state.go('list');
+    });    
   }
 });
 
-app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaService){
+app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaWebService){
   $scope.indice = $stateParams.indice;
-  $scope.tarefa = angular.copy(TarefaService.obtem($scope.indice));
+
+  TarefaWebService.obtem($scope.indice).then(function(response){
+    $scope.tarefa = response;
+  });
 
   $scope.salvar = function(){
-    TarefaService.alterar($scope.indice, $scope.tarefa)
-    $state.go('list');
+    TarefaWebService.alterar($scope.indice, $scope.tarefa).then(function(){
+      $state.go('list');
+    });    
   }
 
 });
@@ -111,6 +157,63 @@ app.factory('TarefaService', function(){
     apagar: function(indice){
       tarefas.splice(indice, 1);
       persistir();
+    }
+  }
+});
+
+//Criando um serviço para manipular as tarefas através do webservice
+app.factory('TarefaWebService', function($http, $q){
+  var url = "http://localhost:3004/api/tarefa";
+
+  var config = {
+    headers : {
+      'Authorization': JSON.parse(window.localStorage.getItem('usuario')).token
+    }
+  };
+
+  return {
+    lista: function(){
+      var deferido = $q.defer();
+      $http.get(url, config).then(function(response){
+        deferido.resolve(response.data);
+      });
+      return deferido.promise;
+    },
+    obtem: function(indice){
+      var deferido = $q.defer();
+      $http.get(url + '/' + indice).then(function(response){
+        deferido.resolve(response.data);
+      });
+      return deferido.promise;
+    },
+    inserir: function(tarefa){
+      var deferido = $q.defer();
+      $http.post(url, tarefa).then(function(){
+        deferido.resolve();
+      });
+      return deferido.promise;
+    },
+    alterar: function(indice, tarefa){
+      var deferido = $q.defer();
+      $http.put(url + '/' + indice, tarefa).then(function(){
+        deferido.resolve();
+      });
+      return deferido.promise;
+    },
+    concluir: function(indice, tarefa){
+      tarefa.feita = true;
+      var deferido = $q.defer();
+      $http.put(url + '/' + indice, tarefa).then(function(){
+        deferido.resolve();
+      });
+      return deferido.promise;
+    },
+    apagar: function(indice){
+      var deferido = $q.defer();
+      $http.delete(url + '/' + indice).then(function(){
+        deferido.resolve();
+      });
+      return deferido.promise;
     }
   }
 });
