@@ -7,5 +7,13 @@
     "gulp-clean-css": "^3.7.0",
     "gulp-rename": "^1.2.0",
     "gulp-sass": "^3.1.0"
+  },
+  "dependencies": {
+    "cordova-sqlite-storage": "git+https://github.com/litehelpers/Cordova-sqlite-storage.git"
+  },
+  "cordova": {
+    "plugins": {
+      "cordova-sqlite-storage": {}
+    }
   }
 }

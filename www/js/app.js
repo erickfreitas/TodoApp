@@ -1,5 +1,5 @@
 //Criando uma biblioteca(modulo) utilizando a lib do ionic
-var app = angular.module('todoapp', ['ionic']);
+var app = angular.module('todoapp', ['ionic', 'ngCordova']);
 
 //Criando rotas e definindo a rota primária
 app.config(function($stateProvider, $urlRouterProvider){
@@ -31,8 +31,10 @@ app.config(function($stateProvider, $urlRouterProvider){
 
 });
 
+var db = null;
+
 //Executa quando inicia o app (igual ao método main do c#)
-app.run(function($ionicPlatform) {
+app.run(function($ionicPlatform, $cordovaSQLite) {
   $ionicPlatform.ready(function() {
     if(window.cordova && window.cordova.plugins.Keyboard) {
       cordova.plugins.Keyboard.hideKeyboardAccessoryBar(true);
@@ -40,7 +42,19 @@ app.run(function($ionicPlatform) {
     }
     if(window.StatusBar) {
       StatusBar.styleDefault();
+    }    
+    if(window.cordova){
+      db = $cordovaSQLite.OpenDB({ name: 'tarefas'});
+      console.log('Db criado no dispositivo');
     }
+    else{
+      db = window.openDatabase('tarefas.db', '1', 'Tarefas db', 200000);
+      console.log('Db criado no navegador');
+    }
+    $cordovaSQLite.execute(db, 'CREATE TABLE IF NOT EXISTS tarefas (id integer primary key, texto text, concluida integer)')
+    .then(function(){
+      console.log('tabela criada');
+    });
   });
 });
 
@@ -68,9 +82,9 @@ app.controller('LoginCtrl', function($scope, $http, $state, $ionicHistory, $ioni
   };
 });
 
-app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebService){
+app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebService, TarefaServiceSqlite){
 
-  TarefaWebService.lista().then(function(response){
+  TarefaServiceSqlite.lista().then(function(response){
     $scope.tarefas = response;
   });
 
@@ -95,7 +109,7 @@ app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebSer
   }
 });
 
-app.controller('NovoCtrl', function($scope, $state, TarefaWebService){
+app.controller('NovoCtrl', function($scope, $state, TarefaWebService, TarefaServiceSqlite){
 
   $scope.tarefa = {
     "texto" : '', // <input ng-model="texto" ..
@@ -104,16 +118,16 @@ app.controller('NovoCtrl', function($scope, $state, TarefaWebService){
   };
   
   $scope.salvar = function(){
-    TarefaWebService.inserir($scope.tarefa).then(function(){
+    TarefaServiceSqlite.inserir($scope.tarefa).then(function(){
       $state.go('list');
     });    
   }
 });
 
-app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaWebService){
+app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaWebService, TarefaServiceSqlite){
   $scope.indice = $stateParams.indice;
 
-  TarefaWebService.obtem($scope.indice).then(function(response){
+  TarefaServiceSqlite.obtem($scope.indice).then(function(response){
     $scope.tarefa = response;
   });
 
@@ -125,7 +139,7 @@ app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaWebSer
 
 });
 
-//Criando um serviço para manipular as tarefas
+//Criando um serviço para manipular as tarefas usando localStorage
 app.factory('TarefaService', function(){
   //Buscando as tarefas do localStorage
   var tarefas = JSON.parse(window.localStorage.getItem('db_tarefas') || '[]');
@@ -214,6 +228,63 @@ app.factory('TarefaWebService', function($http, $q){
         deferido.resolve();
       });
       return deferido.promise;
+    }
+  }
+});
+
+//Criando um serviço para manipular as tarefas utilizando Sqlite
+app.factory('TarefaServiceSqlite', function($q, $cordovaSQLite){
+  return {
+    lista: function(){
+      var deferido = $q.defer();
+      var query = 'SELECT id, texto, concluida FROM tarefas';
+      $cordovaSQLite.execute(db, query).then(function(dados){
+        var tarefas = [];
+        for(var i = 0; i < dados.rows.length; i++){
+          var tarefa = {
+            'id': dados.rows.item(i).id,
+            'texto': dados.rows.item(i).texto,
+            'feita': dados.rows.item(i).concluida,
+          };
+          tarefas.push(tarefa);
+        }
+        deferido.resolve(tarefas);
+      });
+      return deferido.promise;
+    },
+    obtem: function(indice){
+      var deferido = $q.defer();
+      var query = 'SELECT id, texto, concluida FROM tarefas WHERE id = ?';
+      $cordovaSQLite.execute(db, query, [indice]).then(function(dados){
+        var tarefa = {
+          'id': dados.rows.item(0).id,
+          'texto': dados.rows.item(0).texto,
+          'feita': dados.rows.item(0).concluida,
+        };
+        deferido.resolve(tarefa);
+      });
+      return deferido.promise;
+    },
+    inserir: function(tarefa){
+      var deferido = $q.defer();
+      var query = 'INSERT INTO tarefas (texto, concluida) VALUES (?, ?)';
+      $cordovaSQLite.execute(db, query, [tarefa.texto, tarefa.feita])
+      .then(function(response){
+        console.log('Id criado ' + response.insertId);
+      });
+      return deferido.promise;
+    },
+    alterar: function(indice, tarefa){
+      tarefas[indice] = tarefa;
+      persistir();
+    },
+    concluir: function(indice){
+      tarefas[indice].feita = true;
+      persistir();
+    },
+    apagar: function(indice){
+      tarefas.splice(indice, 1);
+      persistir();
     }
   }
 });
