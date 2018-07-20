@@ -89,16 +89,16 @@ app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebSer
   });
 
   $scope.concluir = function(indice, tarefa){
-    TarefaWebService.concluir(indice, tarefa).then(function(){
-      TarefaWebService.lista().then(function(response){
+    TarefaServiceSqlite.concluir(indice).then(function(){
+      TarefaServiceSqlite.lista().then(function(response){
         $scope.tarefas = response;
       });
     });
   }
 
   $scope.apagar = function(indice){
-    TarefaWebService.apagar(indice).then(function(){
-      TarefaWebService.lista().then(function(response){
+    TarefaServiceSqlite.apagar(indice).then(function(){
+      TarefaServiceSqlite.lista().then(function(response){
         $scope.tarefas = response;
       });
     });
@@ -114,12 +114,12 @@ app.controller('NovoCtrl', function($scope, $state, TarefaWebService, TarefaServ
   $scope.tarefa = {
     "texto" : '', // <input ng-model="texto" ..
     "data" : new Date(),
-    "feita" : false
+    "feita" : 0
   };
   
   $scope.salvar = function(){
     TarefaServiceSqlite.inserir($scope.tarefa).then(function(){
-      $state.go('list');
+      $state.go('list', {});
     });    
   }
 });
@@ -132,7 +132,7 @@ app.controller('EditarCtrl', function($scope, $state, $stateParams, TarefaWebSer
   });
 
   $scope.salvar = function(){
-    TarefaWebService.alterar($scope.indice, $scope.tarefa).then(function(){
+    TarefaServiceSqlite.alterar($scope.indice, $scope.tarefa).then(function(){
       $state.go('list');
     });    
   }
@@ -275,16 +275,25 @@ app.factory('TarefaServiceSqlite', function($q, $cordovaSQLite){
       return deferido.promise;
     },
     alterar: function(indice, tarefa){
-      tarefas[indice] = tarefa;
-      persistir();
+      var deferido = $q.defer();
+      var query = 'UPDATE tarefas SET texto = ? WHERE id = ?';
+      $cordovaSQLite.execute(db, query, [tarefa.texto, indice])
+      .then(function(response){});
+      return deferido.promise;
     },
     concluir: function(indice){
-      tarefas[indice].feita = true;
-      persistir();
+      var deferido = $q.defer();
+      var query = 'UPDATE tarefas SET concluida = 1 WHERE id = ?';
+      $cordovaSQLite.execute(db, query, [indice])
+      .then(function(response){});
+      return deferido.promise;
     },
     apagar: function(indice){
-      tarefas.splice(indice, 1);
-      persistir();
+      var deferido = $q.defer();
+      var query = 'DELETE FROM tarefas WHERE id = ?';
+      $cordovaSQLite.execute(db, query, [indice])
+      .then(function(response){});
+      return deferido.promise;
     }
   }
 });
